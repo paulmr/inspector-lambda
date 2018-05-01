@@ -11,7 +11,7 @@ object ChiefInspector extends StrictLogging {
   val inspectionTagName = "Inspection"
   private val instancesPerTagCount = 5
 
-  def createAndRunAssessments(ec2Client: AmazonEC2, inspectorClient: AmazonInspector): Unit = {
+  def createAndRunAssessments(ec2Client: AmazonEC2, inspectorClient: AmazonInspector, filter: Option[TagCombo => Boolean] = None): Unit = {
     val ec2 = new AWSEC2(ec2Client)
     val inspector = new AWSInspector(inspectorClient)
 
@@ -19,7 +19,7 @@ object ChiefInspector extends StrictLogging {
     val allInstanceIds = instances.map(i => i.instanceId)
 
     val matchingInstanceSets = (for {
-      tagCombo <- getTagCombos(instances)
+      tagCombo <- getTagCombos(instances, filter getOrElse (_ => true))
       matchingInstances = getInstancesWithMatchingTags(instances, tagCombo)
     } yield tagCombo -> matchingInstances).toMap
 
@@ -92,12 +92,14 @@ object ChiefInspector extends StrictLogging {
     }
   }
 
-  private[inspectorlambda] def getTagCombos(instances: Set[SimpleInstance]) = {
+  private[inspectorlambda] def getTagCombos(instances: Set[SimpleInstance], filter: TagCombo => Boolean = _ => true) = {
     for {
       instance <- instances
       app = instance.tags.get("App")
       stack = instance.tags.get("Stack")
       stage = instance.tags.get("Stage")
-    } yield TagCombo(stack, app, stage)
+      result = TagCombo(stack, app, stage)
+      if filter(result)
+    } yield result
   }
 }
